@@ -125,13 +125,15 @@ class _ConfigurePlugins(tk.Toplevel):
         self._set_geometry()
         self._tk_vars = dict(header=tk.StringVar())
 
+        theme = {**get_config().user_theme["group_panel"],
+                 **get_config().user_theme["group_settings"]}
         header_frame = self._build_header()
         content_frame = ttk.Frame(self)
 
-        self._tree = _Tree(content_frame, configurations, name).tree
+        self._tree = _Tree(content_frame, configurations, name, theme).tree
         self._tree.bind("<ButtonRelease-1>", self._select_item)
 
-        self._opts_frame = DisplayArea(content_frame, configurations, self._tree)
+        self._opts_frame = DisplayArea(content_frame, configurations, self._tree, theme)
         self._opts_frame.pack(fill=tk.BOTH, expand=True, side=tk.RIGHT)
         footer_frame = self._build_footer()
 
@@ -169,7 +171,7 @@ class _ConfigurePlugins(tk.Toplevel):
         lbl_header = ttk.Label(lbl_frame,
                                textvariable=self._tk_vars["header"],
                                anchor=tk.W,
-                               style="H1.TLabel")
+                               style="SPanel.Header1.TLabel")
         lbl_header.pack(fill=tk.X, expand=True, side=tk.LEFT)
 
         sep = ttk.Frame(header_frame, height=2, relief=tk.RIDGE)
@@ -204,15 +206,15 @@ class _ConfigurePlugins(tk.Toplevel):
                              width=10,
                              command=lambda: self._opts_frame.reset(page_only=True))
 
-        Tooltip(btn_cls, text=_("Close without saving"), wraplength=720)
-        Tooltip(btn_save, text=_("Save this page's config"), wraplength=720)
-        Tooltip(btn_rst, text=_("Reset this page's config to default values"), wraplength=720)
+        Tooltip(btn_cls, text=_("Close without saving"), wrap_length=720)
+        Tooltip(btn_save, text=_("Save this page's config"), wrap_length=720)
+        Tooltip(btn_rst, text=_("Reset this page's config to default values"), wrap_length=720)
         Tooltip(btn_saveall,
                 text=_("Save all settings for the currently selected config"),
-                wraplength=720)
+                wrap_length=720)
         Tooltip(btn_rstall,
                 text=_("Reset all settings for the currently selected config to default values"),
-                wraplength=720)
+                wrap_length=720)
 
         btn_cls.pack(padx=2, side=tk.RIGHT)
         btn_save.pack(padx=2, side=tk.RIGHT)
@@ -256,10 +258,12 @@ class _Tree(ttk.Frame):  # pylint:disable=too-many-ancestors
     name: str
         The name of the section that is being navigated to. Used for opening on the correct
         page in the Tree View. ``None`` if no specific area is being navigated to
+    theme: dict
+        The color mapping for the settings pop-up theme
     """
-    def __init__(self, parent, configurations, name):
+    def __init__(self, parent, configurations, name, theme):
         super().__init__(parent)
-        self._fix_styles()
+        self._fix_styles(theme)
 
         frame = ttk.Frame(self, relief=tk.SOLID, borderwidth=1)
         self._tree = self._build_tree(frame, configurations, name)
@@ -277,20 +281,32 @@ class _Tree(ttk.Frame):  # pylint:disable=too-many-ancestors
         return self._tree
 
     @classmethod
-    def _fix_styles(cls):
+    def _fix_styles(cls, theme):
         """ Tkinter has a bug when setting the background style on certain OSes. This fixes the
         issue so we can set different colored backgrounds.
 
         We also set some default styles for our tree view.
+
+        Parameters
+        ----------
+        theme: dict
+            The color mapping for the settings pop-up theme
         """
         style = ttk.Style()
+
+        # Fix a bug in Tree-view that doesn't show alternate foreground on selection
         fix_map = lambda o: [elm for elm in style.map("Treeview", query_opt=o)  # noqa
                              if elm[:2] != ("!disabled", "!selected")]
-        style.map("Treeview", foreground=fix_map("foreground"), background=fix_map("background"))
-        style.map('Treeview', background=[('selected', '#9B1D20')])
+
         # Remove the Borders
         style.configure("ConfigNav.Treeview", bd=0, background="#F0F0F0")
         style.layout("ConfigNav.Treeview", [('ConfigNav.Treeview.treearea', {'sticky': 'nswe'})])
+
+        # Set colors
+        style.map("ConfigNav.Treeview",
+                  foreground=fix_map("foreground"),
+                  background=fix_map("background"))
+        style.map('ConfigNav.Treeview', background=[('selected', theme["tree_select"])])
 
     def _build_tree(self, parent, configurations, name):
         """ Build the configuration pop-up window.
@@ -378,10 +394,13 @@ class DisplayArea(ttk.Frame):  # pylint:disable=too-many-ancestors
     configurations: dict
         Dictionary containing the :class:`~lib.config.FaceswapConfig` object for each
         configuration section for the requested pop-up window
+    theme: dict
+        The color mapping for the settings pop-up theme
     """
-    def __init__(self, parent, configurations, tree):
+    def __init__(self, parent, configurations, tree, theme):
         super().__init__(parent)
         self._configs = configurations
+        self._theme = theme
         self._tree = tree
         self._vars = dict()
         self._cache = dict()
@@ -439,7 +458,7 @@ class DisplayArea(ttk.Frame):  # pylint:disable=too-many-ancestors
         """ Build the dynamic header text. """
         header_frame = ttk.Frame(self)
         var = tk.StringVar()
-        lbl = ttk.Label(header_frame, textvariable=var, anchor=tk.W, style="H2.TLabel")
+        lbl = ttk.Label(header_frame, textvariable=var, anchor=tk.W, style="SPanel.Header2.TLabel")
         lbl.pack(fill=tk.X, expand=True, side=tk.TOP)
         header_frame.pack(fill=tk.X, padx=5, pady=(5, 0), side=tk.TOP)
         self._vars["header"] = var
@@ -516,13 +535,13 @@ class DisplayArea(ttk.Frame):  # pylint:disable=too-many-ancestors
         if not links:
             return frame
 
-        header_lbl = ttk.Label(frame, text="Select a plugin to configure:")
+        header_lbl = ttk.Label(frame, text=_("Select a plugin to configure:"))
         header_lbl.pack(side=tk.TOP, fill=tk.X, padx=5, pady=(5, 10))
         for link in sorted(links):
             lbl = ttk.Label(frame,
                             text=link.replace("_", " ").title(),
                             anchor=tk.W,
-                            foreground="blue",
+                            foreground=self._theme["link_color"],
                             cursor="hand2")
             lbl.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 5))
             bind = "{}|{}".format(key, link)

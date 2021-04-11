@@ -123,7 +123,7 @@ class ConsoleOut(ttk.Frame):  # pylint: disable=too-many-ancestors
     A Read only text box for displaying the output from stdout/stderr.
 
     All handling is internal to this method. To clear the console, the stored tkinter variable in
-    :attr:`~lib.gui.Config.tk_vars` ``consoleclear`` should be triggered.
+    :attr:`~lib.gui.Config.tk_vars` ``console_clear`` should be triggered.
 
     Parameters
     ----------
@@ -131,53 +131,58 @@ class ConsoleOut(ttk.Frame):  # pylint: disable=too-many-ancestors
         The Console's parent widget
     debug: bool
         ``True`` if console output should not be directed to this widget otherwise ``False``
-
     """
 
     def __init__(self, parent, debug):
         logger.debug("Initializing %s: (parent: %s, debug: %s)",
                      self.__class__.__name__, parent, debug)
-        super().__init__(parent)
-        self.pack(side=tk.TOP, anchor=tk.W, padx=10, pady=(2, 0),
-                  fill=tk.BOTH, expand=True)
-        self._console = _ReadOnlyText(self)
+        super().__init__(parent, relief=tk.SOLID, padding=1, style="Console.TFrame")
+        self._theme = get_config().user_theme["console"]
+        self._console = _ReadOnlyText(self, relief=tk.FLAT)
         rc_menu = ContextMenu(self._console)
         rc_menu.cm_bind()
-        self._console_clear = get_config().tk_vars['consoleclear']
+        self._console_clear = get_config().tk_vars['console_clear']
         self._set_console_clear_var_trace()
         self._debug = debug
         self._build_console()
         self._add_tags()
+        self.pack(side=tk.TOP, anchor=tk.W, padx=10, pady=(2, 0),
+                  fill=tk.BOTH, expand=True)
         logger.debug("Initialized %s", self.__class__.__name__)
 
     def _set_console_clear_var_trace(self):
-        """ Set a trace on the consoleclear tkinter variable to trigger :func:`_clear` """
+        """ Set a trace on the console clear tkinter variable to trigger :func:`_clear` """
         logger.debug("Set clear trace")
         self._console_clear.trace("w", self._clear)
 
     def _build_console(self):
         """ Build and place the console  and add stdout/stderr redirection """
         logger.debug("Build console")
-        self._console.config(width=100, height=6, bg="#CDD3D5", fg="black")
-        self._console.pack(side=tk.LEFT, anchor=tk.N, fill=tk.BOTH, expand=True)
+        self._console.config(width=100,
+                             height=6,
+                             bg=self._theme["background_color"],
+                             fg=self._theme["stdout_color"])
 
-        scrollbar = ttk.Scrollbar(self, command=self._console.yview)
-        scrollbar.pack(side=tk.LEFT, fill="y")
+        scrollbar = ttk.Scrollbar(self,
+                                  command=self._console.yview,
+                                  style="Console.Vertical.TScrollbar")
         self._console.configure(yscrollcommand=scrollbar.set)
 
+        scrollbar.pack(side=tk.RIGHT, fill="y")
+        self._console.pack(side=tk.LEFT, anchor=tk.N, fill=tk.BOTH, expand=True)
         self._redirect_console()
         logger.debug("Built console")
 
     def _add_tags(self):
         """ Add tags to text widget to color based on output """
         logger.debug("Adding text color tags")
-        self._console.tag_config("default", foreground="#1E1E1E")
-        self._console.tag_config("stderr", foreground="#E25056")
-        self._console.tag_config("info", foreground="#2B445E")
-        self._console.tag_config("verbose", foreground="#008140")
-        self._console.tag_config("warning", foreground="#F77B00")
-        self._console.tag_config("critical", foreground="red")
-        self._console.tag_config("error", foreground="red")
+        self._console.tag_config("default", foreground=self._theme["stdout_color"])
+        self._console.tag_config("stderr", foreground=self._theme["stderr_color"])
+        self._console.tag_config("info", foreground=self._theme["info_color"])
+        self._console.tag_config("verbose", foreground=self._theme["verbose_color"])
+        self._console.tag_config("warning", foreground=self._theme["warning_color"])
+        self._console.tag_config("critical", foreground=self._theme["critical_color"])
+        self._console.tag_config("error", foreground=self._theme["error_color"])
 
     def _redirect_console(self):
         """ Redirect stdout/stderr to console Text Box """
@@ -315,7 +320,7 @@ class _WidgetRedirector:
                                self.widget._w)  # pylint:disable=protected-access
 
     def close(self):
-        "Unregister operations and revert redirection created by .__init__."
+        "de-register operations and revert redirection created by .__init__."
         for operation in list(self._operations):
             self.unregister(operation)
         widget = self.widget
@@ -366,7 +371,7 @@ class _WidgetRedirector:
 
         Note that if a registered function is called, the operation is not
         passed through to Tk.  Apply the function returned by self.register()
-        to *args to accomplish that.  For an example, see colorizer.py.
+        to *args to accomplish that.
 
         """
         op_ = self._operations.get(operation)
@@ -382,30 +387,30 @@ class _OriginalCommand:
     """Callable for original tk command that has been redirected.
 
     Returned by .register; can be used in the function registered.
-    redir = WidgetRedirector(text)
+    redirect = WidgetRedirector(text)
     def my_insert(*args):
         print("insert", args)
         original_insert(*args)
-    original_insert = redir.register("insert", my_insert)
+    original_insert = redirect.register("insert", my_insert)
     """
 
-    def __init__(self, redir, operation):
+    def __init__(self, redirect, operation):
         """Create .tk_call and .orig_and_operation for .__call__ method.
 
-        .redir and .operation store the input args for __repr__.
-        .tk and .orig copy attributes of .redir (probably not needed).
+        .redirect and .operation store the input args for __repr__.
+        .tk and .orig copy attributes of .redirect (probably not needed).
         """
-        self.redir = redir
+        self.redirect = redirect
         self.operation = operation
-        self.tk_ = redir.tk_  # redundant with self.redir
-        self.orig = redir.orig  # redundant with self.redir
+        self.tk_ = redirect.tk_  # redundant with self.redirect
+        self.orig = redirect.orig  # redundant with self.redirect
         # These two could be deleted after checking recipient code.
-        self.tk_call = redir.tk_.call
-        self.orig_and_operation = (redir.orig, operation)
+        self.tk_call = redirect.tk_.call
+        self.orig_and_operation = (redirect.orig, operation)
 
     def __repr__(self):
         return "%s(%r, %r)" % (self.__class__.__name__,
-                               self.redir, self.operation)
+                               self.redirect, self.operation)
 
     def __call__(self, *args):
         return self.tk_call(self.orig_and_operation + args)
@@ -537,8 +542,6 @@ class Tooltip:  # pylint:disable=too-few-public-methods
     ----------
     widget: tkinter object
         The widget to apply the tool-tip to
-    background: str, optional
-        The hex code for the background color. Default:'#FFFFEA'
     pad: tuple, optional
         (left, top, right, bottom) padding for the tool-tip. Default: (5, 3, 5, 3)
     text: str, optional
@@ -546,9 +549,9 @@ class Tooltip:  # pylint:disable=too-few-public-methods
     text_variable: :class:`tkinter.strVar`, optional
         The text variable to use for dynamic help text. Appended after the contents of :attr:`text`
         if provided. Default: ``None``
-    waittime: int, optional
+    wait_time: int, optional
         The time in milliseconds to wait before showing the tool-tip. Default: 400
-    wraplength: int, optional
+    wrap_length: int, optional
         The text length for each line before wrapping. Default: 250
 
     Example
@@ -562,18 +565,18 @@ class Tooltip:  # pylint:disable=too-few-public-methods
     Adapted from StackOverflow: http://stackoverflow.com/questions/3221956 and
     http://www.daniweb.com/programming/software-development/code/484591/a-tooltip-class-for-tkinter
     """
-    def __init__(self, widget, *, background="#FFFFEA", pad=(5, 3, 5, 3), text="widget info",
-                 text_variable=None, waittime=400, wraplength=250):
+    def __init__(self, widget, *, pad=(5, 3, 5, 3), text="widget info",
+                 text_variable=None, wait_time=400, wrap_length=250):
 
-        self._waittime = waittime  # in milliseconds, originally 500
-        self._wraplength = wraplength  # in pixels, originally 180
+        self._waittime = wait_time  # in milliseconds, originally 500
+        self.wrap_length = wrap_length  # in pixels, originally 180
         self._widget = widget
         self._text = text
         self._text_variable = text_variable
         self._widget.bind("<Enter>", self._on_enter)
         self._widget.bind("<Leave>", self._on_leave)
         self._widget.bind("<ButtonPress>", self._on_leave)
-        self._background = background
+        self._theme = get_config().user_theme["tooltip"]
         self._pad = pad
         self._ident = None
         self._topwidget = None
@@ -644,7 +647,6 @@ class Tooltip:  # pylint:disable=too-few-public-methods
 
             return x_1, y_1
 
-        background = self._background
         pad = self._pad
         widget = self._widget
 
@@ -660,7 +662,10 @@ class Tooltip:  # pylint:disable=too-few-public-methods
         self._topwidget.wm_overrideredirect(True)
 
         win = tk.Frame(self._topwidget,
-                       background=background,
+                       background=self._theme["background_color"],
+                       highlightbackground=self._theme["border_color"],
+                       highlightcolor=self._theme["border_color"],
+                       highlightthickness=1,
                        borderwidth=0)
 
         text = self._text
@@ -669,10 +674,11 @@ class Tooltip:  # pylint:disable=too-few-public-methods
         label = tk.Label(win,
                          text=text,
                          justify=tk.LEFT,
-                         background=background,
+                         background=self._theme["background_color"],
+                         foreground=self._theme["font_color"],
                          relief=tk.SOLID,
                          borderwidth=0,
-                         wraplength=self._wraplength)
+                         wraplength=self.wrap_length)
 
         label.grid(padx=(pad[0], pad[2]),
                    pady=(pad[1], pad[3]),
@@ -909,7 +915,10 @@ class ToggledFrame(ttk.Frame):  # pylint:disable=too-many-ancestors
     def __init__(self, parent, *args, text="", theme="CPanel", toggle_var=None, **kwargs):
         logger.debug("Initializing %s: (parent: %s, text: %s, theme: %s, toggle_var: %s)",
                      self.__class__.__name__, parent, text, theme, toggle_var)
-        super().__init__(parent, *args, **kwargs)
+
+        theme = "CPanel" if not theme else theme
+        theme = theme[:-1] if theme[-1] == "." else theme
+        super().__init__(parent, *args, style=f"{theme}.Group.TFrame", **kwargs)
         self._text = text
 
         if toggle_var:
@@ -920,11 +929,10 @@ class ToggledFrame(ttk.Frame):  # pylint:disable=too-many-ancestors
         self._icon_var = tk.StringVar()
         self._icon_var.set("-" if self.is_expanded else "+")
 
-        theme = "CPanel" if not theme else theme
-        theme = theme[:-1] if theme[-1] == "." else theme
         self._build_header(theme)
 
-        self.sub_frame = tk.Frame(self, name="toggledframe_subframe", highlightthickness=1, bd=0)
+        self.sub_frame = ttk.Frame(self, style=f"{theme}.Subframe.Group.TFrame", padding=1)
+
         if self.is_expanded:
             self.sub_frame.pack(fill=tk.X, expand=True)
 

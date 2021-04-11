@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw, ImageTk
 
 from ._config import Config as UserConfig
 from .project import Project, Tasks
+from .theme import Style
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 _CONFIG = None
@@ -88,11 +89,11 @@ class FileHandler():  # pylint:disable=too-few-public-methods
 
     Parameters
     ----------
-    handle_type: ['open', 'save', 'filename', 'filename_multi', 'savefilename', 'context', `dir`]
+    handle_type: ['open', 'save', 'filename', 'filename_multi', 'save_filename', 'context', `dir`]
         The type of file dialog to return. `open` and `save` will perform the open and save actions
         and return the file. `filename` returns the filename from an `open` dialog.
         `filename_multi` allows for multi-selection of files and returns a list of files selected.
-        `savefilename` returns the filename from a `save as` dialog. `context` is a context
+        `save_filename` returns the filename from a `save as` dialog. `context` is a context
         sensitive parameter that returns a certain dialog based on the current options. `dir` asks
         for a folder location.
     file_type: ['default', 'alignments', 'config_project', 'config_task', 'config_all', 'csv', \
@@ -115,13 +116,13 @@ class FileHandler():  # pylint:disable=too-few-public-methods
 
     Attributes
     ----------
-    retfile: str or object
+    return_file: str or object
         The return value from the file dialog
 
     Example
     -------
     >>> handler = FileHandler('filename', 'video', title='Select a video...')
-    >>> video_file = handler.retfile
+    >>> video_file = handler.return_file
     >>> print(video_file)
     '/path/to/selected/video.mp4'
     """
@@ -140,7 +141,7 @@ class FileHandler():  # pylint:disable=too-few-public-methods
                                         command,
                                         action,
                                         variable)
-        self.retfile = getattr(self, "_{}".format(self._handletype.lower()))()
+        self.return_file = getattr(self, "_{}".format(self._handletype.lower()))()
         logger.debug("Initialized %s", self.__class__.__name__)
 
     @property
@@ -200,13 +201,13 @@ class FileHandler():  # pylint:disable=too-few-public-methods
                                         "rotate": "filename",
                                         "slice": "filename"},
                                  output={"extract": "dir",
-                                         "gen-vid": "savefilename",
+                                         "gen-vid": "save_filename",
                                          "get-fps": "nothing",
                                          "get-info": "nothing",
-                                         "mux-audio": "savefilename",
-                                         "rescale": "savefilename",
-                                         "rotate": "savefilename",
-                                         "slice": "savefilename"}))
+                                         "mux-audio": "save_filename",
+                                         "rescale": "save_filename",
+                                         "rotate": "save_filename",
+                                         "slice": "save_filename"}))
 
     def _set_defaults(self):
         """ Set the default file type for the file dialog. Generally the first found file type
@@ -247,7 +248,7 @@ class FileHandler():  # pylint:disable=too-few-public-methods
             kwargs["initialdir"] = initialdir
 
         if self._handletype.lower() in (
-                "open", "save", "filename", "filename_multi", "savefilename"):
+                "open", "save", "filename", "filename_multi", "save_filename"):
             kwargs["filetypes"] = self._filetypes[filetype]
             if self._defaults.get(filetype):
                 kwargs['defaultextension'] = self._defaults[filetype]
@@ -809,6 +810,8 @@ class Config():
             status_bar=statusbar,
             command_notebook=None)  # set in command.py
         self._user_config = UserConfig(None)
+        self._style = Style(self.default_font, root, PATHCACHE)
+        self._user_theme = self._style.user_theme
         logger.debug("Initialized %s", self.__class__.__name__)
 
     # Constants
@@ -895,6 +898,11 @@ class Config():
     def user_config_dict(self):
         """ dict: The GUI config in dict form. """
         return self._user_config.config_dict
+
+    @property
+    def user_theme(self):
+        """ dict: The GUI theme selection options. """
+        return self._user_theme
 
     @property
     def default_font(self):
@@ -1036,8 +1044,8 @@ class Config():
         generatecommand = tk.StringVar()
         generatecommand.set(None)
 
-        consoleclear = tk.BooleanVar()
-        consoleclear.set(False)
+        console_clear = tk.BooleanVar()
+        console_clear.set(False)
 
         refreshgraph = tk.BooleanVar()
         refreshgraph.set(False)
@@ -1053,7 +1061,7 @@ class Config():
                        istraining=istraining,
                        action=actioncommand,
                        generate=generatecommand,
-                       consoleclear=consoleclear,
+                       console_clear=console_clear,
                        refreshgraph=refreshgraph,
                        updatepreview=updatepreview,
                        analysis_folder=analysis_folder)
